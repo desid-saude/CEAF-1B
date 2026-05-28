@@ -210,12 +210,12 @@ Essa organização busca garantir rastreabilidade, comparabilidade e transparên
 
 Projeto desenvolvido por:
 
-**Theo da Fonseca Torres**
-**Felipe Duplat Luz**
+- **Theo da Fonseca Torres**
+- **Felipe Duplat Luz**
 
-Ministério da Saúde
-Secretaria Executiva
-Departamento de Economia e Investimentos em Saúde
+**Ministério da Saúde**  
+Secretaria Executiva  
+Departamento de Economia e Investimentos em Saúde  
 Coordenação de Gestão de Dados Estatísticos em Saúde
 
 ---
