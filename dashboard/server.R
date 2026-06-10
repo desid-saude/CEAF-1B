@@ -111,7 +111,16 @@ function(input, output, session) {
     
     # Opções ordenadas
     opcoes_uf <- sort(unique(df$Estado))
-    opcoes_med <- sort(unique(df$Medicamento))
+    df_para_med <- if (!is.null(input$filtro_base) && input$filtro_base %in% df$Base) {
+      df %>% dplyr::filter(Base == input$filtro_base)
+    } else {
+      df
+    }
+    opcoes_med <- df_para_med %>%
+      group_by(Medicamento) %>%
+      summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+      arrange(desc(Valor_Total)) %>%
+      pull(Medicamento)
     opcoes_base <- sort(unique(df$Base))
     opcoes_catmat <- sort(unique(df$CATMAT))
     
@@ -136,7 +145,7 @@ function(input, output, session) {
           "filtro_base",
           "Selecione a Fonte de Dados:",
           choices  = opcoes_base,
-          selected = "LAI",
+          selected = if (!is.null(input$filtro_base)) input$filtro_base else "LAI",
           multiple = FALSE,
           options  = list(plugins = list("remove_button"))
         )
@@ -255,45 +264,41 @@ function(input, output, session) {
       formatRound(columns = c("Qtd_Total"), digits = 0, mark = ".", dec.mark = ",") 
   })
   
-  output$grafico_top10 <- renderPlotly({
+  output$grafico_top5 <- renderPlotly({
     req(dados_agregados())
-    
-    top_df <- head(dados_agregados(), 5)
-    if(nrow(top_df) == 0) return(NULL)
-    
-    # ID único para o ggplot não somar itens diferentes com mesmo nome
-    top_df$Item_Completo <- paste(top_df$Medicamento, "-", top_df$Apresentacao)
-    
-    # "dicionário" para os Rótulos do Eixo:
-    # Chave = ID Único (Com apresentação) -> Valor = Nome Limpo (Só Medicamento)
-    labels_eixo <- setNames(top_df$Medicamento, top_df$Item_Completo)
-    
-    top_df <- top_df %>%
+
+    top_df <- dados_agregados() %>%
+      group_by(Medicamento) %>%
+      summarise(
+        Valor_Total = sum(Valor_Total, na.rm = TRUE),
+        Qtd_Total   = sum(Qtd_Total,   na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      arrange(desc(Valor_Total)) %>%
+      head(5) %>%
       mutate(Rotulo = paste0(
-        "<b>Fornecedor:<b> ", Fornecedor, "<br>",
         "<b>Medicamento:</b> ", Medicamento, "<br>",
-        "<b>Apresentação:</b> ", Apresentacao, "<br>", 
-        "<b>Valor Total:</b> R$ ", format(Valor_Total, big.mark=".", decimal.mark=",", nsmall=2), "<br>",
-        "<b>Qtd:</b> ", Qtd_Total
+        "<b>Valor Total:</b> R$ ", format(Valor_Total, big.mark = ".", decimal.mark = ",", nsmall = 2), "<br>",
+        "<b>Qtd:</b> ", format(Qtd_Total, big.mark = ".", decimal.mark = ",")
       ))
-    
-    p <- ggplot(top_df, aes(x = reorder(Item_Completo, Valor_Total), 
-                            y = Valor_Total, 
+
+    if (nrow(top_df) == 0) return(NULL)
+
+    p <- ggplot(top_df, aes(x = reorder(Medicamento, Valor_Total),
+                            y = Valor_Total,
                             text = Rotulo,
                             fill = Valor_Total)) +
-      
+
       geom_col(show.legend = FALSE, alpha = 0.9, width = 0.6) +
-      
+
       coord_flip() +
-      
+
       scale_fill_gradient(low = "#88d8b0", high = "#198754") +
-      
+
       labs(x = NULL, y = NULL) +
-      
-      scale_x_discrete(labels = labels_eixo) + 
-      
+
       scale_y_continuous(labels = scales::label_number(big.mark = ".", decimal.mark = ",")) +
-      
+
       theme_minimal(base_size = 12) +
       theme(
         panel.grid.major.x = element_blank(),
@@ -301,9 +306,9 @@ function(input, output, session) {
         axis.text.y = element_text(color = "#2c3e50"),
         panel.grid.minor = element_blank()
       )
-    
+
     ggplotly(p, tooltip = "text") %>%
-      layout(margin = list(l = 150)) 
+      layout(margin = list(l = 150))
   })
   
   output$grafico_acumulado <- renderPlotly({
@@ -553,8 +558,7 @@ output$grafico_abc <- renderPlotly({
   if(nrow(df_completo) == 0) return(NULL)
   
   # Lista de medicamentos únicos na ordem correta (do maior total para o menor)
-  lista_meds <- unique(df_completo$Medicamento) 
-  max_valor_global <- max(df_completo$Total_Med_Sort, na.rm = TRUE)
+  lista_meds <- unique(df_completo$Medicamento)
   
   # --- Lógica de Paginação (Fatiando a lista de Medicamentos) ---
   n_slots <- paginacao$itens_por_pagina
@@ -610,8 +614,8 @@ output$grafico_abc <- renderPlotly({
     labs(x = NULL, y = NULL) +
     
     scale_y_continuous(
-      labels = scales::label_number(big.mark = ".", decimal.mark = ","), 
-      limits = c(0, max_valor_global * 1.05),
+      labels = scales::label_number(big.mark = ".", decimal.mark = ","),
+      limits = c(0, max(df_plot$Total_Med_Sort, na.rm = TRUE) * 1.05),
       expand = expansion(mult = c(0, 0))
     ) +
     
@@ -675,8 +679,12 @@ observe({
     dplyr::filter(Base == input$sel_med_base)
   
   # B. Atualiza lista de Medicamentos
-  lista_meds <- sort(unique(df_base$Medicamento))
-  
+  lista_meds <- df_base %>%
+    group_by(Medicamento) %>%
+    summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(Valor_Total)) %>%
+    pull(Medicamento)
+
   # Lógica para manter seleção ou pegar o primeiro
   med_atual <- isolate(input$sel_med_preco)
   sel_med <- if(!is.null(med_atual) && med_atual %in% lista_meds) med_atual else lista_meds[1]
@@ -891,7 +899,7 @@ observe({
   
   # Inicialização de segurança para o filtro de Base
   if (is.null(input$sel_base_eco)) {
-    updateSelectInput(session, "sel_base_eco", choices = c("LAI", "PNCP"), selected = "LAI")
+    updateSelectInput(session, "sel_base_eco", choices = c("LAI", "PNCP", "BPS"), selected = "LAI")
     return()
   }
   
@@ -900,8 +908,12 @@ observe({
     dplyr::filter(Base == input$sel_base_eco)
   
   # B. Atualiza Medicamentos disponíveis nesta Base
-  lista_meds <- sort(unique(df_base$Medicamento))
-  
+  lista_meds <- df_base %>%
+    group_by(Medicamento) %>%
+    summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(Valor_Total)) %>%
+    pull(Medicamento)
+
   # Se não houver medicamentos na base (ex: erro de carga), para aqui
   if (length(lista_meds) == 0) return()
   
@@ -1073,6 +1085,92 @@ output$tabela_economia <- renderDT({
     )
 })
 
+# 7. Ranking de Economia Potencial (todos os medicamentos)
+ranking_eco <- reactive({
+  req(dados_raw(), input$sel_base_eco, input$sel_ano_eco)
+
+  df <- dados_raw() %>%
+    dplyr::filter(Base == input$sel_base_eco)
+
+  if (!is.null(input$sel_ano_eco) && input$sel_ano_eco != "Todos") {
+    df <- df %>% dplyr::filter(lubridate::year(Data) == as.numeric(input$sel_ano_eco))
+  }
+
+  if (nrow(df) == 0) return(NULL)
+
+  meds <- unique(df$Medicamento)
+
+  results <- lapply(meds, function(med) {
+    df_med <- df %>% dplyr::filter(Medicamento == med)
+
+    df_estados <- df_med %>%
+      dplyr::group_by(Estado) %>%
+      dplyr::summarise(
+        Qtd_Total   = sum(Quantidade, na.rm = TRUE),
+        Gasto_Real  = sum(Valor,      na.rm = TRUE),
+        Preco_Medio = sum(Valor, na.rm = TRUE) / sum(Quantidade, na.rm = TRUE),
+        .groups = "drop"
+      )
+
+    benchmark <- df_estados %>%
+      dplyr::filter(Preco_Medio > 0) %>%
+      dplyr::slice_min(Preco_Medio, n = 1, with_ties = FALSE)
+
+    if (nrow(benchmark) == 0) return(NULL)
+
+    preco_ref    <- benchmark$Preco_Medio
+    estado_ref   <- benchmark$Estado
+
+    economia_total <- df_estados %>%
+      dplyr::mutate(
+        Economia = pmax(0, Gasto_Real - Qtd_Total * preco_ref)
+      ) %>%
+      dplyr::summarise(
+        Gasto_Real_Total   = sum(Gasto_Real),
+        Economia_Potencial = sum(Economia),
+        .groups = "drop"
+      )
+
+    data.frame(
+      Medicamento        = med,
+      Gasto_Real         = economia_total$Gasto_Real_Total,
+      Economia_Potencial = economia_total$Economia_Potencial,
+      Preco_Benchmark    = preco_ref,
+      Estado_Benchmark   = estado_ref,
+      stringsAsFactors   = FALSE
+    )
+  })
+
+  dplyr::bind_rows(results) %>%
+    dplyr::filter(!is.na(Economia_Potencial), Economia_Potencial > 0) %>%
+    dplyr::arrange(dplyr::desc(Economia_Potencial))
+})
+
+output$tabela_ranking_eco <- renderDT({
+  req(ranking_eco())
+
+  datatable(
+    ranking_eco(),
+    rownames = FALSE,
+    colnames = c("Medicamento", "Gasto Real (R$)", "Economia Potencial (R$)",
+                 "Preço Benchmark (R$/unid.)", "Estado Benchmark"),
+    options = list(
+      pageLength = 10,
+      scrollX    = TRUE,
+      language   = DT_PTBR
+    )
+  ) %>%
+    formatCurrency(
+      columns  = c("Gasto_Real", "Economia_Potencial", "Preco_Benchmark"),
+      currency = "R$ ", interval = 3, mark = ".", dec.mark = ","
+    ) %>%
+    formatStyle(
+      "Economia_Potencial",
+      fontWeight = "bold",
+      color      = "green"
+    )
+})
+
 # =======================================================
 # --- BLOCO DA PÁGINA: PREVISÃO DE GASTOS (PROPHET) ---
 # =======================================================
@@ -1087,7 +1185,11 @@ observe({
     dplyr::filter(Base == input$sel_base_forecast)
   
   # Cria a lista de opções
-  novas_opcoes <- sort(unique(df$Medicamento))
+  novas_opcoes <- df %>%
+    group_by(Medicamento) %>%
+    summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(Valor_Total)) %>%
+    pull(Medicamento)
   
   # Lógica de segurança para a seleção
   selecao_atual <- isolate(input$sel_med_forecast)
@@ -1264,7 +1366,7 @@ output$card_kpi_previsao <- renderUI({
 
     # Inicialização de segurança para a Base
     if (is.null(input$sel_base_conc) || input$sel_base_conc == "") {
-      updateSelectInput(session, "sel_base_conc", choices = c("LAI", "PNCP"), selected = "LAI")
+      updateSelectInput(session, "sel_base_conc", choices = c("LAI", "PNCP", "BPS"), selected = "LAI")
       return()
     }
 
@@ -1272,7 +1374,11 @@ output$card_kpi_previsao <- renderUI({
       dplyr::filter(Base == input$sel_base_conc)
 
     # Opções disponíveis (com proteção contra NA)
-    lista_meds <- sort(unique(df_base$Medicamento))
+    lista_meds <- df_base %>%
+      group_by(Medicamento) %>%
+      summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+      arrange(desc(Valor_Total)) %>%
+      pull(Medicamento)
     lista_anos <- sort(unique(lubridate::year(df_base$Data)), decreasing = TRUE)
     lista_ufs  <- sort(unique(df_base$Estado))
 
@@ -1552,8 +1658,8 @@ observe({
   
   # --- PASSO 1: INICIALIZAÇÃO DA BASE ---
   if (is.null(input$comp_base) || input$comp_base == "") {
-    updateSelectInput(session, "comp_base", 
-                      choices = c("LAI", "PNCP"), 
+    updateSelectInput(session, "comp_base",
+                      choices = c("LAI", "PNCP", "BPS"),
                       selected = "LAI")
     return()
   }
@@ -1566,7 +1672,11 @@ observe({
     filter(Base == input$comp_base)
   
   # Extraímos as opções disponíveis nesta base
-  lista_meds <- sort(unique(df_filtrado_por_base$Medicamento))
+  lista_meds <- df_filtrado_por_base %>%
+    group_by(Medicamento) %>%
+    summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(Valor_Total)) %>%
+    pull(Medicamento)
   lista_anos <- sort(unique(year(df_filtrado_por_base$Data)), decreasing = TRUE)
   lista_ufs  <- sort(unique(df_filtrado_por_base$Estado))
   
@@ -1771,7 +1881,7 @@ output$comp_barras_percapita <- renderPlotly({
   ggplotly(p, tooltip = "text")
 })
 
-outputOptions(output, "grafico_top10", suspendWhenHidden = FALSE)
+outputOptions(output, "grafico_top5", suspendWhenHidden = FALSE)
 outputOptions(output, "grafico_acumulado", suspendWhenHidden = FALSE)
 outputOptions(output, "grafico_dist_preco", suspendWhenHidden = FALSE)
   
@@ -1829,7 +1939,11 @@ outputOptions(output, "grafico_dist_preco", suspendWhenHidden = FALSE)
         lubridate::year(Data) == as.numeric(input$sel_ano_forn)
       )
 
-    meds_disp <- sort(unique(df_ano$Medicamento))
+    meds_disp <- df_ano %>%
+      group_by(Medicamento) %>%
+      summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+      arrange(desc(Valor_Total)) %>%
+      pull(Medicamento)
     med_atual <- isolate(input$sel_med_forn)
     if (is.null(med_atual) || !(med_atual %in% meds_disp)) {
       med_atual <- if (length(meds_disp) > 0) meds_disp[1] else NULL
@@ -2080,7 +2194,11 @@ gini_coef <- function(x) {
 observe({
   req(repasses_raw())
 
-  meds <- sort(unique(repasses_raw()$Medicamento))
+  meds <- repasses_raw() %>%
+    group_by(Medicamento) %>%
+    summarise(Valor_Total = sum(Valor, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(Valor_Total)) %>%
+    pull(Medicamento)
   choices <- c("Todos", meds)
 
   sel <- isolate(input$rep_med)
@@ -2408,6 +2526,62 @@ output$rep_gasto_repasse <- renderPlotly({
     ) %>%
     plotly::config(displayModeBar = FALSE)
 })
+
+
+# =============================================
+# --- SINCRONIZAÇÃO DE FILTROS ENTRE ABAS ---
+# =============================================
+
+# --- Fonte de Dados ---
+base_ids <- c("filtro_base", "sel_base_forecast", "sel_med_base",
+              "sel_base_eco", "sel_base_forn", "sel_base_conc", "comp_base")
+
+sync_base <- reactiveVal(NULL)
+
+lapply(base_ids, function(id) {
+  observeEvent(input[[id]], {
+    val <- input[[id]]
+    if (!is.null(val) && nzchar(val) && !identical(val, sync_base())) {
+      sync_base(val)
+    }
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+})
+
+observeEvent(sync_base(), {
+  val <- sync_base()
+  if (is.null(val)) return()
+  for (id in base_ids) {
+    if (!identical(isolate(input[[id]]), val)) {
+      updateSelectizeInput(session, id, selected = val)
+    }
+  }
+}, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+
+# --- Medicamento (seleção única) ---
+med_ids <- c("sel_med_forecast", "sel_med_preco", "sel_med_eco",
+             "sel_med_forn", "sel_med_conc", "comp_med", "rep_med")
+
+sync_med <- reactiveVal(NULL)
+
+lapply(med_ids, function(id) {
+  observeEvent(input[[id]], {
+    val <- input[[id]]
+    if (!is.null(val) && nzchar(val) && val != "Todos" && !identical(val, sync_med())) {
+      sync_med(val)
+    }
+  }, ignoreInit = TRUE, ignoreNULL = TRUE)
+})
+
+observeEvent(sync_med(), {
+  val <- sync_med()
+  if (is.null(val)) return()
+  for (id in med_ids) {
+    if (!identical(isolate(input[[id]]), val)) {
+      updateSelectizeInput(session, id, selected = val)
+    }
+  }
+}, ignoreInit = TRUE, ignoreNULL = TRUE)
 
 
 }

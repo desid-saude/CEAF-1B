@@ -318,7 +318,7 @@ ui_dashboard <- function() {
                       layout_columns(
                         col_widths = c(12, 12),
                         card(card_header("Dados agrupados"), DTOutput("tabela_agregada")),
-                        card(card_header("Top 5 - Maior Valor Gasto"), plotlyOutput("grafico_top10", height = "300px"))
+                        card(card_header("Top 5 - Maior Valor Gasto"), plotlyOutput("grafico_top5", height = "300px"))
                       )
             ),
             nav_panel("Evolução Acumulada",
@@ -442,7 +442,7 @@ ui_dashboard <- function() {
             col_widths = breakpoints(sm = c(12, 12), lg = c(3, 9)),
             card(
               card_header("Parâmetros"),
-              selectizeInput("sel_base_forecast", "Selecione a Fonte de Dados:", choices = c("LAI", "PNCP"), selected = "LAI", options = list(placeholder = "Selecione a fonte de dados")),
+              selectizeInput("sel_base_forecast", "Selecione a Fonte de Dados:", choices = c("LAI", "PNCP", "BPS"), selected = "LAI", options = list(placeholder = "Selecione a fonte de dados")),
               selectizeInput("sel_med_forecast",  "Selecione o Medicamento:", choices = NULL, options = list(placeholder = "Vazio")),
               sliderInput("horizonte_meses", "Selecione o Tempo de Projeção:", min = 3, max = 12, value = 6, step = 1),
               uiOutput("card_kpi_previsao")
@@ -483,7 +483,7 @@ ui_dashboard <- function() {
                 col_widths = breakpoints(sm = c(12, 12), lg = c(6, 6)),
                 card(
                   card_header("Parâmetros"),
-                  selectizeInput("sel_med_base", "Selecione a Fonte de Dados:", choices = c("LAI", "PNCP"), selected = "LAI", options = list(placeholder = "Selecione a fonte de dados")),
+                  selectizeInput("sel_med_base", "Selecione a Fonte de Dados:", choices = c("LAI", "PNCP", "BPS"), selected = "LAI", options = list(placeholder = "Selecione a fonte de dados")),
                   selectizeInput("sel_med_preco", "Selecione o Medicamento:", choices = NULL, options = list(placeholder = "Vazio")),
                   hr(),
                   div(
@@ -529,7 +529,7 @@ ui_dashboard <- function() {
               card_header("Parâmetros"),
               
               # Base:
-              selectizeInput("sel_base_eco", "Selecione a Fonte de Dados:", choices = c("LAI", "PNCP"), selected = "LAI"),
+              selectizeInput("sel_base_eco", "Selecione a Fonte de Dados:", choices = c("LAI", "PNCP", "BPS"), selected = "LAI"),
 
               # Medicamento:
               selectizeInput("sel_med_eco", "Selecione o Medicamento:", choices = NULL, options = list(placeholder = "Vazio")),
@@ -546,9 +546,15 @@ ui_dashboard <- function() {
               plotlyOutput("grafico_economia", height = "550px")
             )
           ),
-          card(
-            card_header("Detalhamento do Benchmark"),
-            DTOutput("tabela_economia")
+          navset_card_tab(
+            nav_panel(
+              "Detalhamento do Benchmark",
+              DTOutput("tabela_economia")
+            ),
+            nav_panel(
+              "Ranking de Economia Potencial",
+              DTOutput("tabela_ranking_eco")
+            )
           )
         )
       )
@@ -575,7 +581,7 @@ ui_dashboard <- function() {
             title = "Parâmetros",
 
             selectizeInput("sel_base_forn", "Selecione a Fonte de Dados:",
-                          choices = c("LAI", "PNCP"), selected = "LAI"),
+                          choices = c("LAI", "PNCP", "BPS"), selected = "LAI"),
 
             selectizeInput("sel_ano_forn", "Selecione o Ano:",
                           choices = NULL),
@@ -626,7 +632,7 @@ ui_dashboard <- function() {
             title = "Parâmetros",
 
             selectizeInput("sel_base_conc", "Selecione a Fonte de Dados:",
-                          choices = c("LAI", "PNCP"), selected = "LAI"),
+                          choices = c("LAI", "PNCP", "BPS"), selected = "LAI"),
 
             selectizeInput("sel_ano_conc", "Selecione o Ano:",
                           choices = NULL, options = list(placeholder = "Vazio")),
@@ -782,7 +788,7 @@ ui_dashboard <- function() {
                     div("Repasse x Gasto por Estado (UF)"),
                     selectInput(
                       "rep_gasto_base", label = NULL,
-                      choices  = c("LAI" = "LAI", "PNCP" = "PNCP"),
+                      choices  = c("LAI" = "LAI", "PNCP" = "PNCP", "BPS" = "BPS"),
                       selected = "LAI",
                       width    = "120px"
                     )
