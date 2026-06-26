@@ -1,0 +1,10 @@
+name: dashboard_ceaf
+title:
+username: felipeduplat
+account: felipeduplat
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17494178
+bundleId:
+url: https://felipeduplat.shinyapps.io/dashboard_ceaf/
+version: 1
